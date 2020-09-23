@@ -10,12 +10,12 @@ import com.univocity.trader.exchange.binance.futures.model.market.Candlestick;
 import com.univocity.trader.exchange.binance.futures.model.market.ExchangeInfoEntry;
 import com.univocity.trader.indicators.base.TimeInterval;
 import com.univocity.trader.utils.IncomingCandles;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -28,9 +28,6 @@ class BinanceFuturesExchange implements Exchange<Candlestick, Account> {
     private SyncRequestClient restClient;
     private final Map<String, SymbolInformation> symbolInformation = new ConcurrentHashMap<>();
 
-    private final EventLoopGroup eventLoopGroup = new NioEventLoopGroup(2);
-    private String listenKey;
-    private Timer timer;
     private BinanceFuturesClientAccount binanceFuturesClientAccount;
     private char[] apiSecret;
     private String apiKey;
@@ -47,17 +44,13 @@ class BinanceFuturesExchange implements Exchange<Candlestick, Account> {
 
     @Override
     public Candlestick getLatestTick(String symbol, TimeInterval interval) {
-        List<Candlestick> candles = restClient().getCandlestick(symbol, CandlestickInterval.fromTimeInterval(interval), 1L, null, null);
-        if (candles != null && candles.size() > 0) {
-            return candles.get(0);
-        }
-        return null;
+        return restClient().getCandlestick(symbol, CandlestickInterval.ONE_MINUTE, null, null, 1).get(0);
     }
 
     @Override
     public IncomingCandles<Candlestick> getLatestTicks(String symbol, TimeInterval interval) {
         try {
-            return IncomingCandles.fromCollection(restClient().getCandlestick(symbol, CandlestickInterval.fromTimeInterval(interval), null, null, null));
+            return IncomingCandles.fromCollection(restClient().getCandlestick(symbol, CandlestickInterval.fromTimeInterval(interval), null, null, 5));
         } catch (Exception e) {
             throw new IllegalStateException("Error returnning latest ticks of " + symbol, e);
         }
@@ -114,24 +107,18 @@ class BinanceFuturesExchange implements Exchange<Candlestick, Account> {
 
     @Override
     public Map<String, double[]> getLatestPrices() {
-//		try {
-//			List<TickerPrice> allPrices = restClient().get
-//			allPrices.forEach(ticker -> priceReceived(ticker.getSymbol(), ticker.getPriceAmount()));
-//		} catch (Exception e){
-//			log.warn("Unable to load latest prices from Binance", e);
-//		}
-        return Collections.unmodifiableMap(latestPrices);
+        return Collections.emptyMap();
     }
 
     @Override
     public double getLatestPrice(String assetSymbol, String fundSymbol) {
         double price = latestPrices.getOrDefault(assetSymbol, NO_PRICE)[0];
-//		try {
-//			price = Double.parseDouble(restClient().getPrice(assetSymbol + fundSymbol).getPrice());
-//			priceReceived(assetSymbol + fundSymbol, price);
-//		} catch (Exception e) {
-//			log.error("Error getting latest price of " + assetSymbol + fundSymbol, e);
-//		}
+        try {
+            price = restClient().getSymbolPriceTicker(assetSymbol + fundSymbol).get(0).getPrice().doubleValue();
+            priceReceived(assetSymbol + fundSymbol, price);
+        } catch (Exception e) {
+            log.error("Error getting latest price of " + assetSymbol + fundSymbol, e);
+        }
         return price;
     }
 
